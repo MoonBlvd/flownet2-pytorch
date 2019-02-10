@@ -43,7 +43,8 @@ if __name__ == '__main__':
     parser.add_argument('--validation_frequency', type=int, default=5, help='validate every n epochs')
     parser.add_argument('--validation_n_batches', type=int, default=-1)
     parser.add_argument('--render_validation', action='store_true', help='run inference (save flows to file) and every validation_frequency epoch')
-
+    
+    parser.add_argument('--no_loss', action='store_true')
     parser.add_argument('--inference', action='store_true')
     parser.add_argument('--inference_size', type=int, nargs='+', default = [-1,-1], help='spatial size divisible by 64. default (-1,-1) - largest possible valid size would be used')
     parser.add_argument('--inference_batch_size', type=int, default=1)
@@ -153,8 +154,9 @@ if __name__ == '__main__':
             inference_dataset = args.inference_dataset_class(args, False, **tools.kwargs_from_args(args, 'inference_dataset'))
             block.log('Inference Dataset: {}'.format(args.inference_dataset))
             block.log('Inference Input: {}'.format(' '.join([str([d for d in x.size()]) for x in inference_dataset[0][0]])))
-            block.log('Inference Targets: {}'.format(' '.join([str([d for d in x.size()]) for x in inference_dataset[0][1]])))
+#             block.log('Inference Targets: {}'.format(' '.join([str([d for d in x.size()]) for x in inference_dataset[0][1]])))
             inference_loader = DataLoader(inference_dataset, batch_size=args.effective_inference_batch_size, shuffle=False, **inf_gpuargs)
+            print("args.effective_inference_batch_size: ", args.effective_inference_batch_size)
 
     # Dynamically load model and loss class with parameters passed in via "--model_[param]=[value]" or "--loss_[param]=[value]" arguments
     with tools.TimerBlock("Building {} model".format(args.model)) as block:
@@ -168,6 +170,9 @@ if __name__ == '__main__':
                 
             def forward(self, data, target, inference=False ):
                 output = self.model(data)
+                
+                if args.no_loss:
+                    return output
 
                 loss_values = self.loss(output, target)
 
@@ -282,8 +287,8 @@ if __name__ == '__main__':
 
                 params = list(model.parameters())
                 for i in range(len(params)):
-                   param_copy[i].grad = params[i].grad.clone().type_as(params[i]).detach()
-                   param_copy[i].grad.mul_(1./args.loss_scale)
+                    param_copy[i].grad = params[i].grad.clone().type_as(params[i]).detach()
+                    param_copy[i].grad.mul_(1./args.loss_scale)
                 optimizer.step()
                 for i in range(len(params)):
                     params[i].data.copy_(param_copy[i].data)
@@ -349,13 +354,12 @@ if __name__ == '__main__':
 
         
         args.inference_n_batches = np.inf if args.inference_n_batches < 0 else args.inference_n_batches
-
         progress = tqdm(data_loader, ncols=100, total=np.minimum(len(data_loader), args.inference_n_batches), desc='Inferencing ', 
             leave=True, position=offset)
 
         statistics = []
         total_loss = 0
-        for batch_idx, (data, target) in enumerate(progress):
+        for batch_idx, (data, target, video_name, frame_id) in enumerate(progress):
             if args.cuda:
                 data, target = [d.cuda(async=True) for d in data], [t.cuda(async=True) for t in target]
             data, target = [Variable(d) for d in data], [Variable(t) for t in target]
@@ -364,26 +368,35 @@ if __name__ == '__main__':
             # the targets are set to all zeros. thus, losses are actually L1 or L2 norms of compute optical flows, 
             # depending on the type of loss norm passed in
             with torch.no_grad():
-                losses, output = model(data[0], target[0], inference=True)
+                if not args.no_loss:
+                    losses, output = model(data[0], target[0], inference=True)
+                else:
+                    output = model(data[0], [], inference=True)
+                    losses = None
+            if losses is not None:
+                losses = [torch.mean(loss_value) for loss_value in losses] 
+                loss_val = losses[0] # Collect first loss for weight update
+                total_loss += loss_val.data[0]
+                loss_values = [v.data[0] for v in losses]
 
-            losses = [torch.mean(loss_value) for loss_value in losses] 
-            loss_val = losses[0] # Collect first loss for weight update
-            total_loss += loss_val.data[0]
-            loss_values = [v.data[0] for v in losses]
+                # gather loss_labels, direct return leads to recursion limit error as it looks for variables to gather'
+                loss_labels = list(model.module.loss.loss_labels)
 
-            # gather loss_labels, direct return leads to recursion limit error as it looks for variables to gather'
-            loss_labels = list(model.module.loss.loss_labels)
-
-            statistics.append(loss_values)
+                statistics.append(loss_values)
+                progress.set_description('Inference Averages for Epoch {}: '.format(epoch) + tools.format_dictionary_of_losses(loss_labels, np.array(statistics).mean(axis=0)))
+                progress.update(1)
+                
             # import IPython; IPython.embed()
             if args.save_flow or args.render_validation:
                 for i in range(args.inference_batch_size):
                     _pflow = output[i].data.cpu().numpy().transpose(1, 2, 0)
-                    flow_utils.writeFlow( join(flow_folder, '%06d.flo'%(batch_idx * args.inference_batch_size + i)),  _pflow)
-
-            progress.set_description('Inference Averages for Epoch {}: '.format(epoch) + tools.format_dictionary_of_losses(loss_labels, np.array(statistics).mean(axis=0)))
-            progress.update(1)
-
+                    
+#                     flow_utils.writeFlow( join(flow_folder,'%06d.flo'%(batch_idx * args.inference_batch_size + i)),  _pflow)
+                    
+                    if not os.path.isdir(join(flow_folder, video_name[0][i])):
+                        os.mkdir(join(flow_folder, video_name[0][i]))
+                    flow_utils.writeFlow( join(flow_folder, video_name[0][i], frame_id[0][i]+'.flo'),  _pflow)
+                     
             if batch_idx == (args.inference_n_batches - 1):
                 break
 

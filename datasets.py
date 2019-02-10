@@ -1,6 +1,6 @@
 import torch
 import torch.utils.data as data
-
+import scipy
 import os, math, random
 from os.path import *
 import numpy as np
@@ -9,6 +9,70 @@ from glob import glob
 import utils.frame_utils as frame_utils
 
 from scipy.misc import imread, imresize
+
+class TaiwanSA(data.Dataset):
+    def __init__(self, args, is_cropped = False, root = '', replicates = 1):
+        '''
+        root: root directory to images, in my case is "data/taiwan_sa/testing/"
+        '''
+        self.args = args
+        self.is_cropped = is_cropped
+        self.crop_size = args.crop_size
+        self.render_size = args.inference_size
+        self.replicates = replicates
+
+        image_root = join(root, 'frames')
+        file_list = sorted(glob(join(image_root, '*/images/*.jpg')))
+        print("Total number of images: ", len(file_list))
+        self.image_list = []
+        prev_file = file_list[0]
+        for i, file in enumerate(file_list[1:]):
+            video_name = file.split('/')[-3] # for example the file is 'data/taiwan_sa/testing/frames/000456/images/000001.jpg'
+            
+            if prev_file.split('/')[-3] == video_name:
+                img1 = prev_file
+                img2 = file
+                self.image_list += [[img1, img2]]
+            prev_file = file
+        self.size = len(self.image_list)
+        print("Number of image pairs: ", self.size)
+        
+        self.frame_size = frame_utils.read_gen(self.image_list[0][0]).shape
+
+        if (self.render_size[0] < 0) or (self.render_size[1] < 0):
+            if (self.frame_size[0]%64) or (self.frame_size[1]%64):
+                self.render_size[0] = ( (self.frame_size[0])//64 ) * 64
+                self.render_size[1] = ( (self.frame_size[1])//64 ) * 64
+        print("inference_size: ", args.inference_size)
+        args.inference_size = self.render_size
+
+    def __getitem__(self, index):
+
+        index = index % self.size
+        video_name = self.image_list[index][0].split('/')[-3]
+        frame_id = self.image_list[index][1].split('/')[-1].split('.')[-2]
+        
+        img1 = frame_utils.read_gen(self.image_list[index][0])
+        img2 = frame_utils.read_gen(self.image_list[index][1])
+        
+        W = self.args.inference_size[0]
+        H = self.args.inference_size[1]
+        
+        img1 = scipy.misc.imresize(img1, size=(H, W))
+        img2 = scipy.misc.imresize(img2, size=(H, W))
+                
+        images = [img1, img2]
+        image_size = img1.shape[:2]
+
+        images = np.array(images).transpose(3,0,1,2) # convert to (ch, 2, H, W)
+
+        images = torch.from_numpy(images.astype(np.float32))
+        
+        return [images], [], [video_name], [frame_id]
+
+    def __len__(self):
+        return self.size * self.replicates
+    
 
 class StaticRandomCrop(object):
     def __init__(self, image_size, crop_size):
