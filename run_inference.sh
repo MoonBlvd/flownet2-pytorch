@@ -19,6 +19,6 @@ python main.py \
     --save_flow \
     --model FlowNet2 \
     --inference_dataset TaiwanSA \
-    --inference_dataset_root data/taiwan_sa/testing \
+    --inference_dataset_root /data/A3D/ \
     --inference_size 320 192 \
     --resume checkpoints/FlowNet2_checkpoint.pth.tar
