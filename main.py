@@ -266,7 +266,7 @@ if __name__ == '__main__':
 
             data, target = [Variable(d) for d in data], [Variable(t) for t in target]
             if args.cuda and args.number_gpus == 1:
-                data, target = [d.cuda(async=True) for d in data], [t.cuda(async=True) for t in target]
+                data, target = [d.cuda() for d in data], [t.cuda() for t in target]
 
             optimizer.zero_grad() if not is_validate else None
             losses = model(data[0], target[0])
@@ -361,9 +361,8 @@ if __name__ == '__main__':
         total_loss = 0
         for batch_idx, (data, target, video_name, frame_id) in enumerate(progress):
             if args.cuda:
-                data, target = [d.cuda(async=True) for d in data], [t.cuda(async=True) for t in target]
+                data, target = [d.cuda() for d in data], [t.cuda() for t in target]
             data, target = [Variable(d) for d in data], [Variable(t) for t in target]
-
             # when ground-truth flows are not available for inference_dataset, 
             # the targets are set to all zeros. thus, losses are actually L1 or L2 norms of compute optical flows, 
             # depending on the type of loss norm passed in
@@ -406,6 +405,8 @@ if __name__ == '__main__':
 
     # Primary epoch loop
     best_err = 1e8
+    print("args.start_epoch: ", args.start_epoch)
+    print("args.total_epochs: ", args.total_epochs)
     progress = tqdm(list(range(args.start_epoch, args.total_epochs + 1)), miniters=1, ncols=100, desc='Overall Progress', leave=True, position=0)
     offset = 1
     last_epoch_time = progress._time()
@@ -413,6 +414,7 @@ if __name__ == '__main__':
 
     for epoch in progress:
         if args.inference or (args.render_validation and ((epoch - 1) % args.validation_frequency) == 0):
+            print("Running inference...")
             stats = inference(args=args, epoch=epoch - 1, data_loader=inference_loader, model=model_and_loss, offset=offset)
             offset += 1
 
