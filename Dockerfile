@@ -7,6 +7,7 @@ RUN apt-get -y update && apt-get -y upgrade && \
         apt-get install -y sudo cmake g++ gfortran \
         libhdf5-dev pkg-config build-essential \
         wget curl git htop tmux vim ffmpeg rsync openssh-server \
+        python python-dev libpython-dev \
         python3 python3-dev libpython3-dev && \
         apt-get -y autoremove && apt-get -y clean && apt-get -y autoclean && \
         rm -rf /var/lib/apt/lists/*
@@ -29,5 +30,5 @@ RUN wget https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py && \
 RUN git clone https://github.com/MoonBlvd/flownet2-pytorch.git /root/flownet2-pytorch && \
     cd /root/flownet2-pytorch
 # build Flownet2
-#RUN bash /root/flownet2-pytorch/install.sh 
+RUN bash install.sh 
 WORKDIR /root/flownet2-pytorch

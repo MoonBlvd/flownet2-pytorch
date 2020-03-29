@@ -1,0 +1,7 @@
+numpy 
+scipy 
+scikit-image
+tensorboardX
+colorama
+tqdm
+setproctitle
