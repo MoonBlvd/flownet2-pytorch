@@ -16,6 +16,8 @@ from os.path import *
 import models, losses, datasets
 from utils import flow_utils, tools
 
+from collections import defaultdict
+import pdb
 # fp32 copy of parameters for update
 global param_copy
 
@@ -348,7 +350,8 @@ if __name__ == '__main__':
         model.eval()
         
         if args.save_flow or args.render_validation:
-            flow_folder = "{}/inference/{}.epoch-{}-flow-field".format(args.save,args.name.replace('/', '.'),epoch)
+            # flow_folder = "{}/inference/{}.epoch-{}-flow-field".format(args.save,args.name.replace('/', '.'),epoch)
+            flow_folder = args.save
             if not os.path.exists(flow_folder):
                 os.makedirs(flow_folder)
 
@@ -359,6 +362,8 @@ if __name__ == '__main__':
 
         statistics = []
         total_loss = 0
+
+        per_video_flows = defaultdict(dict)
         for batch_idx, (data, target, video_name, frame_id) in enumerate(progress):
             if args.cuda:
                 data, target = [d.cuda() for d in data], [t.cuda() for t in target]
@@ -391,10 +396,18 @@ if __name__ == '__main__':
                     _pflow = output[i].data.cpu().numpy().transpose(1, 2, 0)
                     
 #                     flow_utils.writeFlow( join(flow_folder,'%06d.flo'%(batch_idx * args.inference_batch_size + i)),  _pflow)
-                    
+                    # pdb.set_trace()
+                    # NOTE: old code save each flow image as a .flo file
                     if not os.path.isdir(join(flow_folder, video_name[0][i])):
                         os.mkdir(join(flow_folder, video_name[0][i]))
-                    flow_utils.writeFlow( join(flow_folder, video_name[0][i], frame_id[0][i]+'.flo'),  _pflow)
+                    
+                    # flow_utils.writeFlow( join(flow_folder, video_name[0][i], frame_id[0][i]+'.flo'),  _pflow)
+
+                    # NOTE: new code concate all flow images in each video and save one .npy per video
+                    # per_video_flows[video_name[0][i]][frame_id[0][i]] = _pflow
+                    np.save(join(flow_folder, video_name[0][i], frame_id[0][i]+'.npy'), _pflow.astype(np.float16))
+                    if int(frame_id[0][i]) == 1:
+                        np.save(join(flow_folder, video_name[0][i], '00000.npy'), _pflow.astype(np.float16))
                      
             if batch_idx == (args.inference_n_batches - 1):
                 break

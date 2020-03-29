@@ -149,19 +149,19 @@ class A3D(data.Dataset):
         self.replicates = replicates
 
         image_root = join(root, 'frames')
-        file_list = sorted(glob(join(image_root, '*/images/*.jpg')))
-        pdb.set_trace()
+        # file_list = sorted(glob(join(image_root, '*/images/*.jpg')))
+        file_list = sorted(glob(join(image_root, '*/*.png')))
         print("Total number of images: ", len(file_list))
         self.image_list = []
         prev_file = file_list[0]
         self.all_video_names = []
         for i, file in enumerate(file_list[1:]):
-            video_name = file.split('/')[-3] # for example the file is 'data/taiwan_sa/testing/frames/000456/images/000001.jpg'
+            video_name = file.split('/')[-2] # for example the file is 'data/taiwan_sa/testing/frames/000456/images/000001.jpg'
             if video_name not in self.all_video_names :
                 self.all_video_names.append(video_name)
             if os.path.exists(os.path.join(self.args.save, video_name)):
                 continue
-            if prev_file.split('/')[-3] == video_name:
+            if prev_file.split('/')[-2] == video_name:
                 img1 = prev_file
                 img2 = file
                 self.image_list += [[img1, img2]]
@@ -181,7 +181,7 @@ class A3D(data.Dataset):
     def __getitem__(self, index):
 
         index = index % self.size
-        video_name = self.image_list[index][0].split('/')[-3] # skip "images"
+        video_name = self.image_list[index][0].split('/')[-2] # skip "images"
         frame_id = self.image_list[index][1].split('/')[-1].split('.')[-2]
         
         img1 = frame_utils.read_gen(self.image_list[index][0])
