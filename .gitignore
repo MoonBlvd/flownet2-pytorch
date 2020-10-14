@@ -7,6 +7,7 @@ work/*
 _ext/
 build
 checkpoints/
+data
 networks/channelnorm_package/channelnorm_cuda.egg-info/
 networks/channelnorm_package/dist/
 networks/correlation_package/correlation_cuda.egg-info/

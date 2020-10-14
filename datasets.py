@@ -137,6 +137,7 @@ class HEVI(data.Dataset):
         return self.size * self.replicates
 
 import pdb
+from tqdm import tqdm
 class A3D(data.Dataset):
     def __init__(self, args, is_cropped = False, root = '', replicates = 1):
         '''
@@ -149,14 +150,18 @@ class A3D(data.Dataset):
         self.replicates = replicates
 
         image_root = join(root, 'frames')
-        # file_list = sorted(glob(join(image_root, '*/images/*.jpg')))
-        file_list = sorted(glob(join(image_root, '*/*.png')))
+        folders = sorted(glob(join(image_root, '*')))
+        file_list = []
+        for folder in tqdm(folders):
+            file_list.extend(sorted(glob(join(folder, '*.jpg'))))
+        
         print("Total number of images: ", len(file_list))
+        
         self.image_list = []
         prev_file = file_list[0]
         self.all_video_names = []
-        for i, file in enumerate(file_list[1:]):
-            video_name = file.split('/')[-2] # for example the file is 'data/taiwan_sa/testing/frames/000456/images/000001.jpg'
+        for i, file in tqdm(enumerate(file_list[1:])):
+            video_name = file.split('/')[-2] # for example the file is 'data/BDD100K_plus_DoTA/frames/long001/000001.jpg'
             if video_name not in self.all_video_names :
                 self.all_video_names.append(video_name)
             if os.path.exists(os.path.join(self.args.save, video_name)):
@@ -177,7 +182,6 @@ class A3D(data.Dataset):
                 self.render_size[1] = ( (self.frame_size[1])//64 ) * 64
         print("inference_size: ", args.inference_size)
         args.inference_size = self.render_size
-
     def __getitem__(self, index):
 
         index = index % self.size
